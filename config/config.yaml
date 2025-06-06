@@ -1,0 +1,19 @@
+# Text chunking configurations
+chunking:
+  default_chunk_size: 500
+  default_chunk_overlap: 50
+  splitter_types:
+    character:
+      separator: "\n"
+    recursive:
+      separators: ["\n\n", "\n", " ", ""]
+    fixed: {}
+    markdown: {}
+
+# Retriever configurations for FAISS
+retriever:
+  index_type: "faiss"
+  embedding_model: "sentence-transformers/all-MiniLM-L6-v2"
+  dimension: 384
+  metric: "cosine"  # options: cosine, l2
+  normalize_embeddings: true

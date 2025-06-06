@@ -1,23 +1,20 @@
-from langchain.text_splitter import (
-    CharacterTextSplitter,
-    RecursiveCharacterTextSplitter,
-    MarkdownTextSplitter
-)
-import re
-from typing import List
-import yaml
+from typing import List, Dict, Any
+from sentence_transformers import SentenceTransformer
+import faiss
+import numpy as np
+from chunk import *
 
-
-class TextChunker:
+class Retriever:
     def __init__(self, config_path: str = "../config/config.yaml"):
         """
-        Initialize text chunker with configuration
+        Initialize FAISS retriever
 
         Args:
             config_path (str): Path to the config file
         """
         self.config = self._load_config(config_path)
-        self.chunk_config = self.config['chunking']
+        self.retriever_config = self.config['retriever']
+        self._init_retriever()
 
     def _load_config(self, config_path: str) -> dict:
         """
@@ -32,80 +29,80 @@ class TextChunker:
         with open(config_path, 'r', encoding='utf-8') as f:
             return yaml.safe_load(f)
 
-    def split_text(
-            self,
-            text: str,
-            chunk_size: int = None,
-            chunk_overlap: int = None,
-            splitter_type: str = "character"
-    ) -> List[str]:
+    def _init_retriever(self):
+        """Initialize FAISS retriever with configuration"""
+        self.embedding_model = SentenceTransformer(self.retriever_config['embedding_model'])
+        dimension = self.retriever_config['dimension']
+
+        if self.retriever_config['metric'] == 'cosine':
+            self.index = faiss.IndexFlatIP(dimension)
+        else:  # l2
+            self.index = faiss.IndexFlatL2(dimension)
+
+        # Add ID mapping if normalization is enabled
+        if self.retriever_config['normalize_embeddings']:
+            self.index = faiss.IndexIDMap(faiss.IndexFlatIP(dimension))
+
+    def add_documents(self, documents: List[str]):
         """
-        Split text into chunks using different text splitters
+        Add documents to the FAISS index
 
         Args:
-            text (str): Input text to split
-            chunk_size (int, optional): Size of each chunk
-            chunk_overlap (int, optional): Overlap between chunks
-            splitter_type (str): Type of splitter to use ("character", "recursive", "fixed", "markdown")
-
-        Returns:
-            List[str]: List of text chunks
+            documents (List[str]): List of documents to add
         """
-        # Use default values from config if not specified
-        chunk_size = chunk_size or self.chunk_config['default_chunk_size']
-        chunk_overlap = chunk_overlap or self.chunk_config['default_chunk_overlap']
+        embeddings = self.embedding_model.encode(documents)
 
-        if splitter_type == "character":
-            text_splitter = CharacterTextSplitter(
-                separator=self.chunk_config['splitter_types']['character']['separator'],
-                chunk_size=chunk_size,
-                chunk_overlap=chunk_overlap,
-                length_function=len
-            )
+        if self.retriever_config['normalize_embeddings']:
+            faiss.normalize_L2(embeddings)
 
-        elif splitter_type == "recursive":
-            text_splitter = RecursiveCharacterTextSplitter(
-                chunk_size=chunk_size,
-                chunk_overlap=chunk_overlap,
-                length_function=len,
-                separators=self.chunk_config['splitter_types']['recursive']['separators']
-            )
+        self.index.add(embeddings)
 
-
-        elif splitter_type == "markdown":
-            text_splitter = MarkdownTextSplitter(
-                chunk_size=chunk_size,
-                chunk_overlap=chunk_overlap
-            )
-
-        else:
-            raise ValueError(f"Unknown splitter type: {splitter_type}")
-
-        chunks = text_splitter.split_text(text)
-        return chunks
-
-    @staticmethod
-    def clean_text(text: str) -> str:
+    def search(self, query: str, top_k: int = 5) -> List[Dict]:
         """
-        Clean text by removing extra whitespace and special characters
+        Search for similar documents
 
         Args:
-            text (str): Input text to clean
+            query (str): Query string
+            top_k (int): Number of results to return
 
         Returns:
-            str: Cleaned text
+            List[Dict]: List of search results with document IDs and scores
         """
-        # Remove extra whitespace
-        text = re.sub(r'\s+', ' ', text)
-        # Remove special characters
-        text = re.sub(r'[^\w\s]', '', text)
-        return text.strip()
+        query_embedding = self.embedding_model.encode([query])[0]
+
+        if self.retriever_config['normalize_embeddings']:
+            query_embedding = query_embedding / np.linalg.norm(query_embedding)
+
+        distances, indices = self.index.search(np.array([query_embedding]), top_k)
+
+        return [
+            {'id': int(idx), 'score': float(score)}
+            for idx, score in zip(indices[0], distances[0])
+        ]
+
+    def save_index(self, filepath: str):
+        """
+        Save the FAISS index to disk
+
+        Args:
+            filepath (str): Path to save the index
+        """
+        faiss.write_index(self.index, filepath)
+
+    def load_index(self, filepath: str):
+        """
+        Load the FAISS index from disk
+
+        Args:
+            filepath (str): Path to the saved index
+        """
+        self.index = faiss.read_index(filepath)
 
 if __name__ == '__main__':
     chunker = TextChunker()
 
     # 分块示例
-    text ="""本文档为2024 CCF BDCI 比赛用语料的一部分。部分文档使用大语言模型改写生成，内容可能与现实情况
+    text  ="""本文档为2024 CCF BDCI 比赛用语料的一部分。部分文档使用大语言模型改写生成，内容可能与现实情况
 不符，可能不具备现实意义，仅允许在本次比赛中使用。
 # 【新征程上的铺路人、赋能者、护航员】系列报道之二十二：砥 —— 砺铸秋实风劲更远航 记中国联通 2023 年度集团级劳模风 采
 ### 发布时间：2024-01-10 发布人：新闻宣传中心
@@ -410,6 +407,15 @@ if __name__ == '__main__':
 """
     chunks = chunker.split_text(
         text,
-        splitter_type="markdown"  # 可以是 "character", "recursive", 或 "markdown"
+        splitter_type="markdown"  # 可以是 "character", "recursive", "fixed", 或 "markdown"
     )
-    print(chunks[0])
+
+    # 初始化检索器
+    retriever = Retriever()
+
+    # 添加文档
+    retriever.add_documents(chunks)
+
+    # 搜索
+    results = retriever.search("中国联通", top_k=3)
+    print(results)

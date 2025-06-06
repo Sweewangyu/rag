@@ -1,8 +1,6 @@
-from typing import List, Dict
-import torch
 from prompt import PromptTemplate
 from chunk import TextChunker
-from retrieval import Retriever
+from Retrieval.retrieval import Retriever
 from openai import OpenAI
 API_KEY = "sk-b31b21a0de2240118273137745f5d396"  # 在这里填入您的API密钥
 BASE_URL = "https://dashscope.aliyuncs.com/compatible-mode/v1"
@@ -50,50 +48,3 @@ class RAGSystem:
         # 初始化大语言模型
         self.llm = call_llm(system_prompt,user_text)
 
-    def add_documents(self, documents: List[str]):
-        """添加文档到知识库
-
-        Args:
-            documents: 文档列表
-        """
-        # 1. 文本分块
-        chunks = []
-        for doc in documents:
-            chunks.extend(self.chunker.split_by_semantic(doc))
-
-        # 2. 添加到检索系统
-        self.retriever.add_documents(chunks)
-
-    def answer(self, question: str) -> str:
-        """回答问题
-
-        Args:
-            question: 用户问题
-
-        Returns:
-            答案
-        """
-        # 1. 检索相关文档
-        retrieved_docs = self.retriever.retrieve(question)
-
-        # 2. 构建提示词
-        context = "\n\n".join([doc["content"] for doc in retrieved_docs])
-        prompt = self.prompt_template.get_qa_prompt(context, question)
-        system_prompt = self.prompt_template.get_system_prompt()
-
-        # 3. 生成答案
-        inputs =
-        return answer.split("回答:")[-1].strip()
-
-
-# 使用示例
-if __name__ == "__main__":
-    # 初始化RAG系统
-    rag = RAGSystem()
-
-
-    # 提问并获取答案
-    question = "什么是RAG技术？"
-    answer = rag.answer(question)
-    print(f"问题：{question}")
-    print(f"答案：{answer}")
