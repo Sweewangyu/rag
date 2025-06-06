@@ -12,11 +12,11 @@ MODEL_NAME = "qwen2.5-72b-instruct"
 
 # 输入路径：存放上一步骤中转换好的Markdown文件的文件夹
 # 这应该是上一个脚本中的 'output_folder_path'
-markdown_folder_path = "A_document_markdown"
+markdown_folder_path = "../A_document_markdown"
 
 # 输出路径：用于存放生成的Q&A结果文件
 # 脚本会自动创建此文件夹
-qna_output_folder_path = "A_document_QnA"
+qna_output_folder_path = "../A_document_QnA"
 
 
 # --- Prompt设计 ---

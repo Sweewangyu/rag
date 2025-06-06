@@ -6,11 +6,11 @@ import os
 
 # 1. 设置包含所有PDF文件的文件夹路径
 #    请确保路径字符串前有一个 'r'，以防止转义字符问题。
-input_folder_path = "A_document"
+input_folder_path = "../A_document"
 
 # 2. 设置用于存放转换后的Markdown文件的文件夹路径
 #    建议使用一个新文件夹，脚本会自动创建它（如果不存在）。
-output_folder_path = "A_document_markdown"
+output_folder_path = "../A_document_markdown"
 
 
 # --- 修改结束 ---
